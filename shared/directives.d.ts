@@ -3,8 +3,11 @@ export interface ModelSpec {
   tier: "preview" | "master";
   maxChars: number;
   instruction: boolean;
-  events: "square" | "angle" | "none";
-  voiceCatalog?: string;
+  speed: boolean;
+  events: "square" | "angle" | "laughter" | "none";
+  pause: "break" | "angle" | "bar" | "none";
+  catalog: string;
+  dialogue?: boolean;
   note: string;
 }
 
@@ -16,6 +19,7 @@ export const VOCAL_EVENTS: string[];
 export const PAUSES: Record<string, number>;
 export const MODELS: Record<string, ModelSpec>;
 export const PREVIEW_MODEL: string;
+export const ALL_MODELS: string[];
 export const MASTER_MODELS: string[];
 export function tokenize(text: string): Token[];
 export function translateText(text: string, model: string): string;

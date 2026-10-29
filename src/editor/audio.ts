@@ -1,6 +1,6 @@
-import { api } from "./api";
+import { editorApi as api } from "./api";
 import { audibleTracks, segmentDuration, useStore } from "./store";
-import type { Project, Segment, Tier } from "./types";
+import type { Timeline, Segment, Tier } from "./types";
 
 // One AudioContext for the session; decoded buffers are kept by content hash,
 // which is also the disk-cache key, so a buffer can never go stale.
@@ -37,8 +37,8 @@ function load(hash: string): Promise<AudioBuffer> {
 }
 
 function reportDuration(hash: string, ms: number) {
-  const { project, setDuration } = useStore.getState();
-  const known = project?.segments.some(
+  const { timeline, setDuration } = useStore.getState();
+  const known = timeline?.segments.some(
     (s) => (s.preview_hash === hash && s.preview_duration_ms) || (s.master_hash === hash && s.master_duration_ms),
   );
   if (known) return;
@@ -70,8 +70,8 @@ export const audio = {
   load,
 
   /** Decode cached files whose length the server does not know yet, so blocks get their real width. */
-  async measureMissing(project: Project) {
-    const hashes = project.segments.flatMap((s) => [
+  async measureMissing(timeline: Timeline) {
+    const hashes = timeline.segments.flatMap((s) => [
       ...(s.preview_ready && !s.preview_duration_ms ? [s.preview_hash] : []),
       ...(s.master_ready && !s.master_duration_ms ? [s.master_hash] : []),
     ]);
@@ -93,7 +93,7 @@ export const audio = {
   },
 
   async playTimeline(
-    project: Project,
+    timeline: Timeline,
     fromMs: number,
     monitor: Tier,
     onTick: (ms: number) => void,
@@ -102,15 +102,15 @@ export const audio = {
     stopSources();
     const mine = ++token;
     const c = context();
-    const audible = audibleTracks(project.tracks);
-    const gains = new Map(project.tracks.map((t) => [t.id, t.gain]));
-    const endMs = Math.max(0, ...project.segments.map((s) => s.start_ms + segmentDuration(s, monitor)));
-    const items = project.segments
+    const audible = audibleTracks(timeline.tracks);
+    const gains = new Map(timeline.tracks.map((t) => [t.id, t.gain]));
+    const endMs = Math.max(0, ...timeline.segments.map((s) => s.start_ms + segmentDuration(s, monitor)));
+    const items = timeline.segments
       .filter((s) => audible.has(s.track_id) && s.start_ms + segmentDuration(s, monitor) > fromMs)
       .map((s) => ({ s, hash: hashFor(s, monitor) }))
       .filter((x): x is { s: Segment; hash: string } => x.hash !== null);
 
-    if (!project.segments.some((s) => hashFor(s, monitor)))
+    if (!timeline.segments.some((s) => hashFor(s, monitor)))
       useStore.getState().toast("Nothing rendered yet — preview a segment first (Ctrl+Enter).", "info");
 
     const loaded = await Promise.all(items.map(async (x) => ({ ...x, buf: await load(x.hash) })));
@@ -150,11 +150,11 @@ export const audio = {
   },
 
   /** Bounce every audible segment's master render, at its timeline position, to a WAV file. */
-  async mixdown(project: Project): Promise<Blob> {
+  async mixdown(timeline: Timeline): Promise<Blob> {
     const SR = 48000;
-    const audible = audibleTracks(project.tracks);
-    const gains = new Map(project.tracks.map((t) => [t.id, t.gain]));
-    const items = project.segments.filter((s) => audible.has(s.track_id) && s.master_ready);
+    const audible = audibleTracks(timeline.tracks);
+    const gains = new Map(timeline.tracks.map((t) => [t.id, t.gain]));
+    const items = timeline.segments.filter((s) => audible.has(s.track_id) && s.master_ready);
     const loaded = await Promise.all(items.map(async (s) => ({ s, buf: await load(s.master_hash) })));
     const lengthSec = Math.max(0.5, ...loaded.map(({ s, buf }) => s.start_ms / 1000 + buf.duration)) + 0.5;
     const off = new OfflineAudioContext(2, Math.ceil(lengthSec * SR), SR);

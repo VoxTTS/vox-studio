@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vox Studio launcher: installs dependencies, builds the UI, starts the local
+# VoxTTS Studio launcher: installs dependencies, builds the UI, starts the local
 # server and opens http://localhost:3000 in your default browser.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -15,6 +15,10 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 if [ "$NODE_MAJOR" -lt 18 ]; then
   echo "Node.js 18.18+ is required (found $(node -v))." >&2
   exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+  echo "Note: Python 3.9+ was not found. Cloud features work; install Python to run local models."
 fi
 
 if [ ! -d node_modules ] || [ package.json -nt node_modules ] || [ package-lock.json -nt node_modules ]; then
@@ -42,5 +46,5 @@ open_browser() {
 }
 
 open_browser &
-echo "==> Starting Vox Studio on $URL (Ctrl+C to stop)"
+echo "==> Starting VoxTTS Studio on $URL (Ctrl+C to stop)"
 PORT="$PORT" exec node server/index.js

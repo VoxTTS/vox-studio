@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Download, Loader2, Play, Sparkles } from "lucide-react";
+import { AlertTriangle, Download, Library, Loader2, Play, Sparkles } from "lucide-react";
+import { useApp } from "@/app/store";
+import { api as appApi } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { api } from "@/lib/api";
-import { audio } from "@/lib/audio";
-import { modelSpec, useStore } from "@/lib/store";
-import type { MasterPlan } from "@/lib/types";
+import { editorApi as api } from "./api";
+import { audio } from "./audio";
+import { modelSpec, useStore } from "./store";
+import type { MasterPlan } from "./types";
 
 type Phase = "plan" | "rendering" | "done";
 
 export function MasterDialog() {
   const open = useStore((s) => s.masterOpen);
-  const project = useStore((s) => s.project);
+  const timeline = useStore((s) => s.timeline);
   const { setMasterOpen, renderSegment, setMonitor, setPlayhead, togglePlay, toast, select } = useStore.getState();
   const [plan, setPlan] = useState<MasterPlan | null>(null);
   const [phase, setPhase] = useState<Phase>("plan");
@@ -20,18 +22,18 @@ export function MasterDialog() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    if (!open || !project) return;
+    if (!open || !timeline) return;
     setPhase("plan");
     setPlan(null);
-    api.masterPlan(project.id).then(setPlan).catch((e) => toast(e.message));
-  }, [open, project?.id, project?.master_model]); // eslint-disable-line react-hooks/exhaustive-deps
+    api.masterPlan(timeline.id).then(setPlan).catch((e) => toast(e.message));
+  }, [open, timeline?.id, timeline?.master_model]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!project) return null;
-  const spec = modelSpec(project.master_model);
-  const missingVoice = spec.voiceCatalog ? project.tracks.filter((t) => !t.master_voice_id) : [];
+  if (!timeline) return null;
+  const spec = modelSpec(timeline.master_model);
+  const missingVoice = spec.catalog !== "vox-2" ? timeline.tracks.filter((t) => !t.master_voice_id) : [];
 
   const render = async () => {
-    const todo = project.segments.filter((s) => s.text.trim() && !s.master_ready);
+    const todo = timeline.segments.filter((s) => s.text.trim() && !s.master_ready);
     setPhase("rendering");
     setProgress({ done: 0, failed: 0, total: todo.length });
     // Three in flight keeps well under the API's 60 requests/minute.
@@ -43,18 +45,29 @@ export function MasterDialog() {
       }
     };
     await Promise.all([worker(), worker(), worker()]);
-    setPlan(await api.masterPlan(project.id));
+    setPlan(await api.masterPlan(timeline.id));
     setPhase("done");
   };
 
-  const exportWav = async () => {
+  const exportWav = async (to: "file" | "library") => {
     setExporting(true);
     try {
-      const fresh = useStore.getState().project!;
+      const fresh = useStore.getState().timeline!;
       const blob = await audio.mixdown(fresh);
+      if (to === "library") {
+        await appApi.uploadLibrary(blob, {
+          kind: "mixdown",
+          title: `${fresh.name} — master`,
+          model: fresh.master_model,
+          engine: "cloud",
+          project_id: fresh.project_id ?? useApp.getState().activeProjectId,
+        });
+        toast("Mixdown saved to the Library", "info");
+        return;
+      }
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${fresh.name.replace(/[^\w\- ]+/g, "").trim() || "master"} — ${project.master_model}.wav`;
+      a.download = `${fresh.name.replace(/[^\w\- ]+/g, "").trim() || "master"} — ${timeline.master_model}.wav`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
     } catch (err) {
@@ -144,8 +157,11 @@ export function MasterDialog() {
           >
             <Play /> Play master
           </Button>
-          <Button variant={allReady ? "default" : "outline"} disabled={!plan?.cached || exporting || phase === "rendering"} onClick={exportWav}>
+          <Button variant={allReady ? "default" : "outline"} disabled={!plan?.cached || exporting || phase === "rendering"} onClick={() => exportWav("file")}>
             {exporting ? <Loader2 className="animate-spin" /> : <Download />} Export WAV mixdown
+          </Button>
+          <Button variant="outline" disabled={!plan?.cached || exporting || phase === "rendering"} onClick={() => exportWav("library")}>
+            <Library /> Save to Library
           </Button>
         </div>
       </DialogContent>

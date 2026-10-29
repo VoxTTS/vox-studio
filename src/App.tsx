@@ -1,52 +1,49 @@
 import { useEffect } from "react";
-import { Inspector } from "@/components/Inspector";
-import { MasterDialog } from "@/components/MasterDialog";
-import { SettingsDialog } from "@/components/SettingsDialog";
-import { Timeline } from "@/components/Timeline";
+import { Shell } from "@/app/Shell";
+import { useApp } from "@/app/store";
 import { Toasts } from "@/components/Toasts";
-import { TopBar } from "@/components/TopBar";
-import { Transport } from "@/components/Transport";
-import { useStore } from "@/lib/store";
+import { EditorPage } from "@/editor/EditorPage";
+import { ApiKeyPage } from "@/pages/ApiKeyPage";
+import { AudiobookPage } from "@/pages/AudiobookPage";
+import { LibraryPage } from "@/pages/LibraryPage";
+import { LocalModelsPage } from "@/pages/LocalModelsPage";
+import { PodcastPage } from "@/pages/PodcastPage";
+import { ProjectsPage } from "@/pages/ProjectsPage";
+import { SpeechPage } from "@/pages/SpeechPage";
+import { TranscribePage } from "@/pages/TranscribePage";
+import { VoicesPage } from "@/pages/VoicesPage";
 
-function isTyping(el: EventTarget | null) {
-  return el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
-}
+const PAGES = {
+  speech: SpeechPage,
+  podcast: PodcastPage,
+  audiobook: AudiobookPage,
+  transcribe: TranscribePage,
+  voices: VoicesPage,
+  library: LibraryPage,
+  projects: ProjectsPage,
+  editor: EditorPage,
+  models: LocalModelsPage,
+  key: ApiKeyPage,
+};
 
 export default function App() {
+  const route = useApp((s) => s.route);
   useEffect(() => {
-    useStore.getState().init();
+    useApp.getState().init();
   }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const s = useStore.getState();
-      if (s.settingsOpen || s.masterOpen) return;
-      if (e.key === "Escape") return s.select(null);
-      if (isTyping(e.target)) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        s.togglePlay();
-      } else if ((e.key === "Delete" || e.key === "Backspace") && s.selection?.kind === "segment") {
-        e.preventDefault();
-        s.deleteSegment(s.selection.id);
-      } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && s.selection?.kind === "segment") {
-        e.preventDefault();
-        s.renderSegment(s.selection.id, "preview", { play: true });
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
+  const Page = PAGES[route];
   return (
-    <div className="flex h-full flex-col">
-      <TopBar />
-      <Transport />
-      <Timeline />
-      <Inspector />
-      <SettingsDialog />
-      <MasterDialog />
+    <>
+      <Shell>
+        {route === "editor" ? (
+          <Page />
+        ) : (
+          <div className="h-full overflow-y-auto">
+            <Page />
+          </div>
+        )}
+      </Shell>
       <Toasts />
-    </div>
+    </>
   );
 }

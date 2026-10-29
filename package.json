@@ -1,8 +1,8 @@
 {
-  "name": "vox-studio",
-  "version": "0.1.0",
+  "name": "voxtts-studio",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local-first multi-track script timeline editor for VoxTTS",
+  "description": "VoxTTS Studio, local edition: playground, voices, library, projects, local open-source models and a timeline editor add-on",
   "type": "module",
   "engines": {
     "node": ">=18.18"

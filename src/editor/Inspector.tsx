@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Play, Sparkles, Trash2, Zap } from "lucide-react";
 import { MODELS, PAUSES, PREVIEW_MODEL, VOCAL_EVENTS, combineInstruction, translateText } from "@shared/directives.js";
-import { DirectiveText } from "./DirectiveText";
+import { DirectiveText } from "@/components/DirectiveText";
 import { VoiceInput } from "./VoiceInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { audio } from "@/lib/audio";
-import { modelSpec, segmentDuration, useStore } from "@/lib/store";
-import type { Project, Segment, Tier, Track } from "@/lib/types";
+import { audio } from "./audio";
+import { modelSpec, segmentDuration, useStore } from "./store";
+import type { Timeline, Segment, Tier, Track } from "./types";
 import { cn, formatTime } from "@/lib/utils";
 
 const EMOTION_PRESETS = [
@@ -56,21 +56,21 @@ function useDraft(value: string, commit: (v: string) => unknown, delay = 450) {
 }
 
 export function Inspector() {
-  const project = useStore((s) => s.project);
+  const timeline = useStore((s) => s.timeline);
   const selection = useStore((s) => s.selection);
-  if (!project) return null;
-  const segment = selection?.kind === "segment" ? project.segments.find((s) => s.id === selection.id) : undefined;
+  if (!timeline) return null;
+  const segment = selection?.kind === "segment" ? timeline.segments.find((s) => s.id === selection.id) : undefined;
   const track =
     selection?.kind === "track"
-      ? project.tracks.find((t) => t.id === selection.id)
-      : segment && project.tracks.find((t) => t.id === segment.track_id);
+      ? timeline.tracks.find((t) => t.id === selection.id)
+      : segment && timeline.tracks.find((t) => t.id === segment.track_id);
 
   return (
     <div className="h-[262px] shrink-0 border-t bg-panel" data-testid="inspector">
       {segment && track ? (
-        <SegmentInspector key={segment.id} segment={segment} track={track} project={project} />
+        <SegmentInspector key={segment.id} segment={segment} track={track} timeline={timeline} />
       ) : track ? (
-        <TrackInspector key={track.id} track={track} project={project} />
+        <TrackInspector key={track.id} track={track} timeline={timeline} />
       ) : (
         <EmptyInspector />
       )}
@@ -78,7 +78,7 @@ export function Inspector() {
   );
 }
 
-function SegmentInspector({ segment, track, project }: { segment: Segment; track: Track; project: Project }) {
+function SegmentInspector({ segment, track, timeline }: { segment: Segment; track: Track; timeline: Timeline }) {
   const { patchSegment, deleteSegment, renderSegment } = useStore.getState();
   const rendering = useStore((s) => s.rendering[segment.id]);
   const last = useStore((s) => s.lastRender[segment.id]);
@@ -109,7 +109,7 @@ function SegmentInspector({ segment, track, project }: { segment: Segment; track
     renderSegment(segment.id, tier, { play: true });
   };
 
-  const masterModel = project.master_model;
+  const masterModel = timeline.master_model;
   const master = modelSpec(masterModel);
   const fullInstruction = combineInstruction(track.direction, instruction.draft);
   const previewText = translateText(text.draft, PREVIEW_MODEL);
@@ -316,13 +316,13 @@ function RenderRow(props: {
   );
 }
 
-function TrackInspector({ track, project }: { track: Track; project: Project }) {
+function TrackInspector({ track, timeline }: { track: Track; timeline: Timeline }) {
   const { patchTrack, deleteTrack } = useStore.getState();
   const name = useDraft(track.name, (v) => v.trim() && patchTrack(track.id, { name: v.trim() }));
   const direction = useDraft(track.direction, (v) => patchTrack(track.id, { direction: v }));
-  const master = modelSpec(project.master_model);
-  const ownCatalog = Boolean(master.voiceCatalog);
-  const lines = project.segments.filter((s) => s.track_id === track.id).length;
+  const master = modelSpec(timeline.master_model);
+  const ownCatalog = master.catalog !== "vox-2";
+  const lines = timeline.segments.filter((s) => s.track_id === track.id).length;
 
   return (
     <div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] divide-x">
@@ -365,7 +365,7 @@ function TrackInspector({ track, project }: { track: Track; project: Project }) 
         <VoiceInput model={PREVIEW_MODEL} value={track.voice_id} onCommit={(v) => v && patchTrack(track.id, { voice_id: v })} />
         <Label className="mt-2">Master voice · {master.label}</Label>
         <VoiceInput
-          model={project.master_model}
+          model={timeline.master_model}
           value={track.master_voice_id}
           placeholder={ownCatalog ? "Pick from this model's catalogue" : `Same as preview (${track.voice_id})`}
           onCommit={(v) => patchTrack(track.id, { master_voice_id: v })}

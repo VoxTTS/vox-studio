@@ -1,8 +1,19 @@
-# Vox Studio
+# VoxTTS Studio · local edition
 
-A local-first, multi-track script timeline editor for [VoxTTS](https://voxtts.app). Write multi-speaker scripts as tracks on a timeline (one per character), direct each line with vocal events and emotion annotations, audition lines instantly on `vox-2-flash`, then render a master on `vox-3-studio`, `vox-4` or `vox-2` and export a WAV mixdown.
+A simplified [voxtts.app](https://voxtts.app) that runs on your own computer at **http://localhost:3000**. It talks to the VoxTTS API with your key and can also download and run open-source TTS and STT models from Hugging Face, with ModelScope as a mirror.
 
-Everything runs on your machine at **http://localhost:3000**. Projects live in a local SQLite database, and every rendered segment is cached on disk.
+| Area | What it does |
+| --- | --- |
+| **Playground · Speech** | Text to speech on all eight VoxTTS models (Vox 2, Flash, 2.5, 3 Studio, 3 Express, 3.1, 3.5, 4) or on a local model. Covers voice, style direction, speed, delivery and language. Long text is split by sentence and joined. Tags like `<laugh>` and `<short pause>` are translated to each model's syntax. |
+| **Playground · Podcast** | Multi-speaker dialogue on Vox 3 (up to 4 speakers, 24 lines): paste a `Name: text` script, run **Auto-direct** (adds tags and style notes for free), and turn on optional overlapping reactions. |
+| **Playground · Audiobook** | Whole manuscripts (up to 100k characters) rendered in the background on voxtts.app, with optional "magic" casting and chapter direction. Shows progress, lets you stop and resume, and saves MP3, M4B or ZIP to the Library. |
+| **Playground · Transcribe** | Speech to text with `vox-stt-1` (word timestamps, diarization, voice profile) or a local Whisper. Export as .txt or .srt. |
+| **Voices** | The catalogue for each model family, including your designed and cloned voices. Previews cost about 50 characters once and are cached after that. You can also **design a voice**, then rename or delete it. |
+| **Library** | Every result is stored on disk, with search, filters, rename, download and move-to-project. |
+| **Projects** | Folders for Library items, audiobooks and timelines. The project chosen at the bottom of the sidebar is where new work is filed. |
+| **API key** | Save, test, replace or remove your `VOXTTS_API_KEY`. Shows the models it unlocks, the characters this app spent per model, and how much the cache saved. |
+| **Local models** | Search Hugging Face and ModelScope, pick files, download with progress (falling back to the other hub per file), and install a runtime with one click. |
+| **Timeline editor** (add-on) | Multi-track script timeline: one track per character, timed lines, Flash previews, a master render on any model, and a WAV mixdown to a file or to the Library. |
 
 ## Quick start
 
@@ -14,7 +25,7 @@ macOS / Linux:
 
 Windows: double-click `launch.bat`.
 
-The launcher installs dependencies, builds the UI, starts the server and opens your browser. You need Node.js 18.18 or newer. On first launch the Settings dialog opens. Paste your `VOXTTS_API_KEY` and click **Test connection**. The test calls `GET /api/v1/models`, which costs no characters.
+The launcher installs dependencies, builds the UI, starts the server and opens your browser. It needs Node.js 18.18 or newer. If no key is saved, the app opens on the **API key** tab. Testing the key calls `GET /api/v1/models`, which costs nothing.
 
 For development with hot reload:
 
@@ -23,48 +34,41 @@ npm install
 npm run dev
 ```
 
+## Local models
+
+Local inference needs **Python 3.9+** (3.10–3.12 is best). Everything installs into a private virtual environment under `data/runtime`, and your system Python is never touched. Install only the runtimes you need from the Local models tab:
+
+| Runtime | Runs | Try |
+| --- | --- | --- |
+| Piper | Piper ONNX voices, ~60 MB each | `rhasspy/piper-voices` (pick one voice folder) |
+| Kokoro (ONNX) | Kokoro-82M with 50+ voices, no PyTorch | `fastrtc/kokoro-onnx` |
+| Kokoro (PyTorch) | `hexgrad/Kokoro-82M` with `.pt` voice packs | needs Python ≤ 3.12 |
+| Transformers | any `text-to-speech` or `automatic-speech-recognition` pipeline model: MMS-TTS, VITS, Bark, Whisper, wav2vec2… | `facebook/mms-tts-eng`, `openai/whisper-tiny` |
+| faster-whisper | Whisper converted to CTranslate2 | `Systran/faster-whisper-small` |
+
+Any repository on either hub can be downloaded. The runtime is detected from its files, and you can override the runtime and the task. Downloads try Hugging Face first. If HF fails or rate-limits, the same file is fetched from ModelScope, which mirrors most speech repos under the same id or under `AI-ModelScope/` or `openai-mirror/`. Under **Hub settings** you can add a Hugging Face token (higher limits, gated models) or point at another HF mirror such as `https://hf-mirror.com`.
+
+Audio for local transcription is converted to 16 kHz mono WAV in the browser, so ffmpeg is not needed.
+
 ## How it works
 
 | Piece | Where |
 | --- | --- |
-| UI: React + Vite + Tailwind, shadcn-style components | `src/` |
-| Local API server: Express, bound to `127.0.0.1` only | `server/index.js` |
-| SQLite (better-sqlite3): projects, tracks, segments, settings, cache index | `server/db.js` → `data/vox-studio.db` |
-| VoxTTS client and disk cache | `server/vox.js` → `data/cache/<hash>.mp3` |
-| Directive parsing and per-model translation (shared by server and UI) | `shared/directives.js` |
-| Playback, timeline scheduling and WAV mixdown (Web Audio) | `src/lib/audio.ts` |
+| UI: React + Vite + Tailwind, shadcn-style components | `src/app`, `src/pages`, `src/components` |
+| Timeline editor add-on | `src/editor`, `server/routes/timelines.js` |
+| Local API server: Express, bound to `127.0.0.1` | `server/index.js`, `server/routes/*` |
+| SQLite (better-sqlite3): settings, projects, library, usage, timelines, local models | `server/db.js` → `data/vox-studio.db` |
+| VoxTTS client and request cache | `server/vox.js` → `data/cache/<hash>.mp3` |
+| Library files | `data/library/` |
+| Hub search and downloads (HF + ModelScope) | `server/local/hub.js` → `data/models/` |
+| Python runtime manager and worker | `server/local/runtime.js`, `local-runtime/runner.py` |
+| Model capabilities and tag translation | `shared/directives.js` |
 
-The API key is stored in the local database. The browser never sees it: the UI calls the local server, and the local server calls `https://voxtts.app/api/v1/*` with `Authorization: Bearer …`. A `VOXTTS_API_KEY` environment variable also works as a fallback.
+**The key stays local.** It is stored in `data/vox-studio.db` and only the local server sends it, as a bearer token to `https://voxtts.app/api/v1/*`. The browser never receives it. A `VOXTTS_API_KEY` environment variable also works.
 
-### Caching
+**Renders are cached.** Each request is keyed by a hash of text, voice, model, instruction and options. Replaying a line, editing another one, or pressing Generate twice never spends characters again. The API key tab shows how much the cache has saved.
 
-Each render is keyed by a SHA-256 of the exact request: spoken text, `voice_id`, `model` and `instruction`. Editing one line, moving blocks around, or replaying the timeline never re-bills another line. Changing a line's text, voice, model or emotion creates a new key, so cached audio is never stale. The Render Master dialog shows how many characters will be billed before anything is sent. **Settings → Render cache** shows the cache size and how many characters cache hits have saved.
-
-### Directives
-
-Write directives once in canonical form. They are translated to each model's syntax at render time:
-
-| You write | vox-2-flash / vox-2 | vox-3-studio | vox-4 |
-| --- | --- | --- | --- |
-| `<sigh>`, `<laugh>`, `<gasp>`… | `[sigh]` | `<sigh>` | dropped (not supported) |
-| `<short pause>` / `<long pause>` | `<break time="0.5s" />` | `<short pause>` | `<\|0.5\|>` |
-| Emotion field, e.g. `whisper, conspiratorial` | `instruction` (vox-2 only; Flash ignores it) | `instruction` | ignored |
-
-Each track also has a **character direction**, for example "nervous rookie". It is prepended to every line's emotion annotation. Open **Request body** in the inspector to see exactly what will be sent.
-
-### Voices
-
-Vox 3 Studio and Vox 4 have their own voice catalogues, so each track has a **preview voice** (vox-2 catalogue) and an optional **master voice**. When a key is saved, both fields suggest voices from `GET /api/v1/voices?model=…`.
-
-## Using the editor
-
-- **Double-click a lane** to add a line at that time. Use **+ Line** on a track header to append one.
-- **Drag a block** to move it in time or onto another character's track. Moves snap to 50 ms; hold Shift to turn snapping off.
-- **Double-click a block**, or press **Ctrl/Cmd+Enter**, to preview it on Flash.
-- **Space** plays or pauses the timeline. The **Preview / Master** toggle picks which renders you hear.
-- **Preview missing** renders every line that has no preview yet. **Pack** re-spaces every line end to end in its current order.
-- A block's width is an estimate until the line is rendered (dashed border). After that it matches the real audio length.
-- **Render Master** renders the lines not yet cached on the master model, then lets you play the master or export a 48 kHz WAV mixdown. Mixing respects mute, solo and track gain.
+**Projects are pointers.** Moving an item between projects never re-renders or bills anything. Deleting a project keeps its contents unless you choose to delete them.
 
 ## Configuration
 
@@ -73,5 +77,6 @@ Vox 3 Studio and Vox 4 have their own voice catalogues, so each track has a **pr
 | `PORT` | `3000` |
 | `HOST` | `127.0.0.1` |
 | `VOX_STUDIO_DATA_DIR` | `./data` |
-| `VOXTTS_API_KEY` | (fallback when no key is saved in Settings) |
+| `VOXTTS_API_KEY` | (fallback when no key is saved) |
 | `VOXTTS_BASE_URL` | `https://voxtts.app` |
+| `HF_TOKEN`, `HF_ENDPOINT`, `MODELSCOPE_ENDPOINT` | (can also be set in Hub settings) |

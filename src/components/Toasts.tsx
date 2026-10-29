@@ -1,12 +1,12 @@
 import { X } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { useApp } from "@/app/store";
 import { cn } from "@/lib/utils";
 
 export function Toasts() {
-  const toasts = useStore((s) => s.toasts);
-  const dismiss = useStore((s) => s.dismissToast);
+  const toasts = useApp((s) => s.toasts);
+  const dismiss = useApp((s) => s.dismissToast);
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-96 flex-col gap-2">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -17,7 +17,7 @@ export function Toasts() {
           )}
         >
           <span className="flex-1 leading-relaxed">{t.message}</span>
-          <button onClick={() => dismiss(t.id)} className="opacity-60 hover:opacity-100">
+          <button onClick={() => dismiss(t.id)} className="opacity-60 hover:opacity-100" aria-label="Dismiss">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>

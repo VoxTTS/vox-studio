@@ -1,16 +1,15 @@
 import { create } from "zustand";
 import { MODELS } from "@shared/directives.js";
-import { api } from "./api";
+import { editorApi as api } from "./api";
+import { fail, useApp } from "@/app/store";
 import { audio } from "./audio";
-import type { Project, ProjectSummary, Segment, Settings, Tier, Track } from "./types";
+import type { Timeline, TimelineSummary, Segment, Tier, Track } from "./types";
 
 export type Selection = { kind: "segment"; id: number } | { kind: "track"; id: number } | null;
-type Toast = { id: number; message: string; tone: "error" | "info" };
 
 interface State {
-  projects: ProjectSummary[];
-  project: Project | null;
-  settings: Settings | null;
+  timelines: TimelineSummary[];
+  timeline: Timeline | null;
   selection: Selection;
   pxPerSec: number;
   playheadMs: number;
@@ -18,15 +17,13 @@ interface State {
   monitor: Tier;
   rendering: Record<number, Tier | undefined>;
   lastRender: Record<number, { ms: number; cached: boolean; model: string } | undefined>;
-  toasts: Toast[];
-  settingsOpen: boolean;
   masterOpen: boolean;
 
   init(): Promise<void>;
-  openProject(id: number): Promise<void>;
-  createProject(name: string): Promise<void>;
-  renameProject(name: string): void;
-  deleteProject(): Promise<void>;
+  openTimeline(id: number): Promise<void>;
+  createTimeline(name: string): Promise<void>;
+  renameTimeline(name: string): void;
+  deleteTimeline(): Promise<void>;
   setMasterModel(model: string): void;
 
   addTrack(): void;
@@ -48,11 +45,8 @@ interface State {
   togglePlay(): Promise<void>;
   stop(): void;
 
-  setSettings(s: Settings): void;
-  setSettingsOpen(open: boolean): void;
   setMasterOpen(open: boolean): void;
-  toast(message: string, tone?: Toast["tone"]): void;
-  dismissToast(id: number): void;
+  toast(message: string, tone?: "error" | "info"): void;
 }
 
 /** Rough read-time until a segment has real audio: ~15 chars/sec plus pauses. */
@@ -74,32 +68,28 @@ export function audibleTracks(tracks: Track[]) {
 
 // Responses arrive out of order when edits are quick; only the newest may replace local state.
 let seq = 0;
-let toastId = 0;
 
 export const useStore = create<State>((set, get) => {
-  const fail = (err: unknown) => get().toast(err instanceof Error ? err.message : String(err));
-
-  /** Apply a local change immediately, then adopt the server's view of the project. */
-  async function mutate(local: (p: Project) => Project, remote: () => Promise<Project>) {
-    const p = get().project;
-    if (p) set({ project: local(p) });
+  /** Apply a local change immediately, then adopt the server's view of the timeline. */
+  async function mutate(local: (p: Timeline) => Timeline, remote: () => Promise<Timeline>) {
+    const p = get().timeline;
+    if (p) set({ timeline: local(p) });
     const mine = ++seq;
     try {
       const next = await remote();
-      if (mine === seq) set({ project: next });
+      if (mine === seq) set({ timeline: next });
     } catch (err) {
       fail(err);
       if (p) {
-        const fresh = await api.project(p.id).catch(() => null);
-        if (fresh && mine === seq) set({ project: fresh });
+        const fresh = await api.timeline(p.id).catch(() => null);
+        if (fresh && mine === seq) set({ timeline: fresh });
       }
     }
   }
 
   return {
-    projects: [],
-    project: null,
-    settings: null,
+    timelines: [],
+    timeline: null,
     selection: null,
     pxPerSec: 80,
     playheadMs: 0,
@@ -107,75 +97,74 @@ export const useStore = create<State>((set, get) => {
     monitor: "preview",
     rendering: {},
     lastRender: {},
-    toasts: [],
-    settingsOpen: false,
     masterOpen: false,
 
     async init() {
       try {
-        const [settings, projects] = await Promise.all([api.settings(), api.projects()]);
-        set({ settings, projects, settingsOpen: !settings.hasKey });
-        const last = Number(localStorage.getItem("vox-studio:project"));
-        const target = projects.find((p) => p.id === last) ?? projects[0];
-        if (target) await get().openProject(target.id);
+        const timelines = await api.timelines();
+        set({ timelines });
+        if (get().timeline) return;
+        const last = Number(localStorage.getItem("vox-studio:timeline"));
+        const target = timelines.find((p) => p.id === last) ?? timelines[0];
+        if (target) await get().openTimeline(target.id);
       } catch (err) {
         fail(err);
       }
     },
 
-    async openProject(id) {
+    async openTimeline(id) {
       get().stop();
       try {
-        const project = await api.project(id);
-        set({ project, selection: null, playheadMs: 0 });
-        localStorage.setItem("vox-studio:project", String(id));
-        audio.measureMissing(project);
+        const timeline = await api.timeline(id);
+        set({ timeline, selection: null, playheadMs: 0 });
+        localStorage.setItem("vox-studio:timeline", String(id));
+        audio.measureMissing(timeline);
       } catch (err) {
         fail(err);
       }
     },
 
-    async createProject(name) {
+    async createTimeline(name) {
       try {
-        const project = await api.createProject(name);
-        set({ project, selection: null, playheadMs: 0, projects: await api.projects() });
-        localStorage.setItem("vox-studio:project", String(project.id));
+        const timeline = await api.createTimeline(name, useApp.getState().activeProjectId);
+        set({ timeline, selection: null, playheadMs: 0, timelines: await api.timelines() });
+        localStorage.setItem("vox-studio:timeline", String(timeline.id));
       } catch (err) {
         fail(err);
       }
     },
 
-    renameProject(name) {
-      const p = get().project;
+    renameTimeline(name) {
+      const p = get().timeline;
       if (!p) return;
-      mutate((x) => ({ ...x, name }), () => api.patchProject(p.id, { name })).then(async () =>
-        set({ projects: await api.projects() }),
+      mutate((x) => ({ ...x, name }), () => api.patchTimeline(p.id, { name })).then(async () =>
+        set({ timelines: await api.timelines() }),
       );
     },
 
-    async deleteProject() {
-      const p = get().project;
+    async deleteTimeline() {
+      const p = get().timeline;
       if (!p) return;
       try {
-        await api.deleteProject(p.id);
-        const projects = await api.projects();
-        set({ projects, project: null });
-        if (projects[0]) await get().openProject(projects[0].id);
+        await api.deleteTimeline(p.id);
+        const timelines = await api.timelines();
+        set({ timelines, timeline: null });
+        if (timelines[0]) await get().openTimeline(timelines[0].id);
       } catch (err) {
         fail(err);
       }
     },
 
     setMasterModel(model) {
-      const p = get().project;
+      const p = get().timeline;
       if (!p) return;
-      mutate((x) => ({ ...x, master_model: model }), () => api.patchProject(p.id, { master_model: model })).then(
-        () => get().project && audio.measureMissing(get().project!),
+      mutate((x) => ({ ...x, master_model: model }), () => api.patchTimeline(p.id, { master_model: model })).then(
+        () => get().timeline && audio.measureMissing(get().timeline!),
       );
     },
 
     addTrack() {
-      const p = get().project;
+      const p = get().timeline;
       if (p) mutate((x) => x, () => api.addTrack(p.id));
     },
 
@@ -197,9 +186,9 @@ export const useStore = create<State>((set, get) => {
 
     async addSegment(trackId, startMs) {
       try {
-        const { id, project } = await api.addSegment(trackId, { text: "", start_ms: startMs });
+        const { id, timeline } = await api.addSegment(trackId, { text: "", start_ms: startMs });
         ++seq;
-        set({ project, selection: { kind: "segment", id } });
+        set({ timeline, selection: { kind: "segment", id } });
         requestAnimationFrame(() => document.getElementById("segment-text")?.focus());
       } catch (err) {
         fail(err);
@@ -220,7 +209,7 @@ export const useStore = create<State>((set, get) => {
     },
 
     packTimeline() {
-      const { project: p, monitor } = get();
+      const { timeline: p, monitor } = get();
       if (!p) return;
       const GAP = 350;
       let cursor = 0;
@@ -244,11 +233,11 @@ export const useStore = create<State>((set, get) => {
       try {
         const result = await api.render(id, tier);
         set((s) => ({ lastRender: { ...s.lastRender, [id]: { ms: result.ms, cached: result.cached, model: result.model } } }));
-        const p = get().project;
+        const p = get().timeline;
         if (p) {
           const mine = ++seq;
-          const fresh = await api.project(p.id);
-          if (mine === seq) set({ project: fresh });
+          const fresh = await api.timeline(p.id);
+          if (mine === seq) set({ timeline: fresh });
         }
         if (opts.play) await audio.playOne(result.hash);
         else await audio.load(result.hash);
@@ -262,10 +251,10 @@ export const useStore = create<State>((set, get) => {
     },
 
     setDuration(hash, ms) {
-      const p = get().project;
+      const p = get().timeline;
       if (!p) return;
       set({
-        project: {
+        timeline: {
           ...p,
           segments: p.segments.map((s) =>
             s.preview_hash === hash
@@ -298,12 +287,12 @@ export const useStore = create<State>((set, get) => {
     },
 
     async togglePlay() {
-      const { playing, project, playheadMs, monitor } = get();
+      const { playing, timeline, playheadMs, monitor } = get();
       if (playing) return get().stop();
-      if (!project) return;
+      if (!timeline) return;
       set({ playing: true });
       try {
-        await audio.playTimeline(project, playheadMs, monitor, (ms) => set({ playheadMs: ms }), () =>
+        await audio.playTimeline(timeline, playheadMs, monitor, (ms) => set({ playheadMs: ms }), () =>
           set({ playing: false }),
         );
       } catch (err) {
@@ -317,22 +306,11 @@ export const useStore = create<State>((set, get) => {
       set({ playing: false });
     },
 
-    setSettings(settings) {
-      set({ settings });
-    },
-    setSettingsOpen(settingsOpen) {
-      set({ settingsOpen });
-    },
     setMasterOpen(masterOpen) {
       set({ masterOpen });
     },
     toast(message, tone = "error") {
-      const id = ++toastId;
-      set((s) => ({ toasts: [...s.toasts, { id, message, tone }] }));
-      setTimeout(() => get().dismissToast(id), tone === "error" ? 7000 : 3500);
-    },
-    dismissToast(id) {
-      set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+      useApp.getState().toast(message, tone);
     },
   };
 });

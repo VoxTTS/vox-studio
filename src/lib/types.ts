@@ -1,82 +1,102 @@
-export type Tier = "preview" | "master";
-
-export interface Track {
-  id: number;
-  project_id: number;
-  name: string;
-  color: string;
-  voice_id: string;
-  master_voice_id: string;
-  direction: string;
-  position: number;
-  muted: number;
-  solo: number;
-  gain: number;
-}
-
-export interface Segment {
-  id: number;
-  track_id: number;
-  text: string;
-  instruction: string;
-  start_ms: number;
-  preview_hash: string;
-  preview_ready: boolean;
-  preview_chars: number;
-  preview_duration_ms: number | null;
-  master_hash: string;
-  master_ready: boolean;
-  master_chars: number;
-  master_duration_ms: number | null;
-}
-
-export interface Project {
-  id: number;
-  name: string;
-  master_model: string;
-  updated_at: string;
-  tracks: Track[];
-  segments: Segment[];
-}
-
-export interface ProjectSummary {
-  id: number;
-  name: string;
-  updated_at: string;
-  track_count: number;
-}
-
 export interface Settings {
   hasKey: boolean;
   keySource: "saved" | "env" | null;
   keyHint: string | null;
   baseUrl: string;
   defaultBaseUrl: string;
+  lastCheck: { ok: boolean; at: string; ms?: number; models?: string[]; error?: string } | null;
 }
 
 export interface Voice {
   id: string;
   name: string;
   description?: string;
+  languages?: string[];
   tags?: string[];
+  model?: string;
+  facets?: Record<string, string[]>;
 }
 
-export interface RenderResult {
-  hash: string;
-  cached: boolean;
+export interface Project {
+  id: number;
+  name: string;
+  description: string;
+  color: string;
+  archived: boolean;
+  updated_at: string;
+  counts: { library: number; audiobooks: number; timelines: number };
+}
+
+export interface LibraryItem {
+  id: number;
+  kind: "speech" | "podcast" | "audiobook" | "transcript" | "mixdown" | "upload" | string;
+  title: string;
+  text: string;
+  engine: "cloud" | "local" | string;
+  model: string;
+  voice: string;
+  file: string | null;
+  url: string | null;
+  mime: string | null;
+  bytes: number;
+  duration_ms: number | null;
   chars: number;
-  tier: Tier;
-  model: string;
-  url: string;
-  ms: number;
-  request: Record<string, unknown>;
+  meta: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  project_id: number | null;
+  created_at: string;
 }
 
-export interface MasterPlan {
+export interface Audiobook {
+  id: string;
+  title: string;
   model: string;
-  segments: number;
-  cached: number;
-  billable_chars: number;
-  total_chars: number;
-  too_long: number[];
+  narrator_voice: string;
+  status: "draft" | "rendering" | "stitching" | "ready" | "paused";
+  error: string | null;
+  characters?: number;
+  progress?: { passages: number; done: number; failed: number; pending: number };
+  audio_seconds?: number;
+  chapters?: { title: string; direction?: string }[];
+  files?: Record<string, { bytes: number; url: string }>;
+  project_id: number | null;
+  created_at?: string;
+}
+
+export interface LocalModel {
+  id: string;
+  repo_id: string;
+  source: "hf" | "ms";
+  task: "tts" | "stt";
+  adapter: string;
+  status: "downloading" | "ready" | "error" | "cancelled";
+  bytes_total: number;
+  bytes_done: number;
+  files: string[];
+  error: string | null;
+  voices: string[];
+}
+
+export interface RuntimeStatus {
+  python: { command: string; version: string } | null;
+  venv: string | null;
+  adapters: Record<string, { label: string; tasks: string[]; note: string; installed: boolean }>;
+  install: { adapter: string | null; running: boolean; log: string[]; error: string | null; finished: string | null };
+  worker: boolean;
+}
+
+export interface HubModel {
+  id: string;
+  downloads: number;
+  likes: number;
+  task: "tts" | "stt";
+  library: string | null;
+  tags: string[];
+  updated: string | null;
+  size?: number | null;
+}
+
+export interface Usage {
+  byModel: { model: string; month: number; total: number; requests: number }[];
+  byKind: { kind: string; chars: number }[];
+  cache: { files: number; bytes: number; saved: number; dir: string };
 }

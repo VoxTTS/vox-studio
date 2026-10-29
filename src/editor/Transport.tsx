@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlignHorizontalJustifyStart, Loader2, Pause, Play, SkipBack, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { segmentDuration, useStore } from "@/lib/store";
+import { segmentDuration, useStore } from "./store";
 import { cn, formatTime } from "@/lib/utils";
 
 export function Transport() {
@@ -9,11 +9,11 @@ export function Transport() {
   const playheadMs = useStore((s) => s.playheadMs);
   const pxPerSec = useStore((s) => s.pxPerSec);
   const monitor = useStore((s) => s.monitor);
-  const project = useStore((s) => s.project);
+  const timeline = useStore((s) => s.timeline);
   const { togglePlay, setPlayhead, setZoom, setMonitor, packTimeline, renderSegment } = useStore.getState();
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
 
-  const segments = project?.segments ?? [];
+  const segments = timeline?.segments ?? [];
   const missing = segments.filter((s) => s.text.trim() && !s.preview_ready);
   const total = Math.max(0, ...segments.map((s) => s.start_ms + segmentDuration(s, monitor)));
 

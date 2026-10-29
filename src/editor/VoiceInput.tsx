@@ -1,24 +1,7 @@
 import { useEffect, useId, useState } from "react";
+import { useApp } from "@/app/store";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api";
-import { useStore } from "@/lib/store";
-import type { Voice } from "@/lib/types";
-
-const catalogs = new Map<string, Promise<Voice[]>>();
-
-function voicesFor(model: string) {
-  let p = catalogs.get(model);
-  if (!p) {
-    p = api.voices(model).then((r) => r.voices);
-    p.catch(() => catalogs.delete(model));
-    catalogs.set(model, p);
-  }
-  return p;
-}
-
-export function clearVoiceCatalogs() {
-  catalogs.clear();
-}
+import { useVoices } from "@/lib/voices";
 
 /** Free-text voice id with suggestions from the model's catalogue (when a key is saved). */
 export function VoiceInput({
@@ -32,22 +15,12 @@ export function VoiceInput({
   placeholder?: string;
   onCommit: (v: string) => void;
 }) {
-  const hasKey = useStore((s) => s.settings?.hasKey);
-  const [voices, setVoices] = useState<Voice[]>([]);
+  const hasKey = useApp((s) => s.settings?.hasKey);
+  const { voices } = useVoices(model);
   const [draft, setDraft] = useState(value);
   const listId = useId();
 
   useEffect(() => setDraft(value), [value]);
-  useEffect(() => {
-    if (!hasKey) return;
-    let live = true;
-    voicesFor(model)
-      .then((v) => live && setVoices(v))
-      .catch(() => live && setVoices([]));
-    return () => {
-      live = false;
-    };
-  }, [model, hasKey]);
 
   const commit = () => draft.trim() !== value && onCommit(draft.trim());
   const match = voices.find((v) => v.id === draft);
@@ -72,8 +45,8 @@ export function VoiceInput({
         ))}
       </datalist>
       <p className="mt-1 truncate text-[10px] text-muted-foreground">
-        {match?.description ??
-          (voices.length ? `${voices.length} voices in catalogue` : hasKey ? "Loading catalogue…" : "Add an API key to browse voices")}
+        {match ? `${match.name} — ${match.description ?? ""}` :
+          voices.length ? `${voices.length} voices in catalogue` : hasKey ? "Loading catalogue…" : "Add an API key to browse voices"}
       </p>
     </div>
   );

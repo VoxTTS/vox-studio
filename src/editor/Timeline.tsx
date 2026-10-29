@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Mic2, Plus, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { DirectiveText } from "./DirectiveText";
+import { DirectiveText } from "@/components/DirectiveText";
 import { Button } from "@/components/ui/button";
-import { audibleTracks, segmentDuration, useStore } from "@/lib/store";
-import type { Segment, Track } from "@/lib/types";
+import { audibleTracks, segmentDuration, useStore } from "./store";
+import type { Segment, Track } from "./types";
 import { cn, formatTime } from "@/lib/utils";
 
 const HEADER_W = 208;
@@ -19,7 +19,7 @@ function rulerStep(pxPerSec: number) {
 }
 
 export function Timeline() {
-  const project = useStore((s) => s.project);
+  const timeline = useStore((s) => s.timeline);
   const pxPerSec = useStore((s) => s.pxPerSec);
   const playheadMs = useStore((s) => s.playheadMs);
   const playing = useStore((s) => s.playing);
@@ -65,15 +65,15 @@ export function Timeline() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [setZoom]);
 
-  const tracks = project?.tracks ?? [];
+  const tracks = timeline?.tracks ?? [];
   const audible = useMemo(() => audibleTracks(tracks), [tracks]);
   const endMs = useMemo(
-    () => Math.max(0, ...(project?.segments ?? []).map((s) => s.start_ms + segmentDuration(s, monitor))),
-    [project, monitor],
+    () => Math.max(0, ...(timeline?.segments ?? []).map((s) => s.start_ms + segmentDuration(s, monitor))),
+    [timeline, monitor],
   );
   const contentW = Math.max(viewW - HEADER_W, ((endMs + 20_000) / 1000) * pxPerSec);
 
-  if (!project) return <div className="flex-1" />;
+  if (!timeline) return <div className="flex-1" />;
 
   const msAt = (clientX: number) => {
     const el = scrollRef.current!;
@@ -183,7 +183,7 @@ export function Timeline() {
                 addSegment(track.id, Math.round(msAt(e.clientX) / SNAP_MS) * SNAP_MS);
               }}
             >
-              {project.segments
+              {timeline.segments
                 .filter((s) => (drag?.id === s.id ? tracks[drag.trackIndex]?.id === track.id : s.track_id === track.id))
                 .map((s) => (
                   <SegmentBlock
@@ -216,9 +216,9 @@ export function Timeline() {
 
 function TrackHeader({ track, audible, selected }: { track: Track; audible: boolean; selected: boolean }) {
   const { select, patchTrack, addSegment } = useStore.getState();
-  const masterModel = useStore((s) => s.project?.master_model);
+  const masterModel = useStore((s) => s.timeline?.master_model);
   const endOfTrack = useStore((s) =>
-    Math.max(0, ...(s.project?.segments ?? []).filter((x) => x.track_id === track.id).map((x) => x.start_ms + segmentDuration(x, s.monitor) + 300)),
+    Math.max(0, ...(s.timeline?.segments ?? []).filter((x) => x.track_id === track.id).map((x) => x.start_ms + segmentDuration(x, s.monitor) + 300)),
   );
   return (
     <div
