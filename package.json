@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "description": "VoxTTS Studio, local edition: playground, voices, library, projects, local open-source models and a timeline editor add-on",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=18.18"

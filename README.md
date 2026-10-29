@@ -80,3 +80,13 @@ Audio for local transcription is converted to 16 kHz mono WAV in the browser, so
 | `VOXTTS_API_KEY` | (fallback when no key is saved) |
 | `VOXTTS_BASE_URL` | `https://voxtts.app` |
 | `HF_TOKEN`, `HF_ENDPOINT`, `MODELSCOPE_ENDPOINT` | (can also be set in Hub settings) |
+
+## License
+
+[MIT](LICENSE) © 2026 VoxTTS.
+
+The MIT license covers this repository's code. It does not cover:
+
+- **The VoxTTS service.** Using the cloud features requires a VoxTTS account and is governed by the [VoxTTS terms](https://voxtts.app/terms). The VoxTTS name and logo are not licensed for reuse.
+- **Models you download.** Each model on Hugging Face or ModelScope has its own license, shown on its model card. Some licenses restrict commercial use (for example, Meta's MMS models are CC-BY-NC 4.0). Check the license before you publish audio made with a model.
+- **Python packages installed by the Local models tab.** Each runtime (piper-tts, kokoro-onnx, transformers, faster-whisper, PyTorch, espeak-ng) keeps its own license. espeak-ng is GPL-3.0; it is installed separately on your machine and is not bundled with this code.
